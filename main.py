@@ -69,7 +69,7 @@ def lancer_scan_expert(sport_key):
         events = requests.get(url).json()
         if isinstance(events, list) and len(events) > 0:
             for m in events[:5]:
-                # On ajuste les moyennes selon le sport (Soccer vs Baseball)
+                # On ajuste les moyennes selon le sport
                 m_dom = 1.8 if sport_key == "soccer" else 4.2
                 m_ext = 1.2 if sport_key == "soccer" else 3.5
                 stats = analyser_match_complet(m_dom, m_ext)
@@ -82,4 +82,42 @@ def lancer_scan_expert(sport_key):
 # --- 6. INTERFACE BOUTONS ---
 @bot.message_handler(commands=['menu', 'start'])
 def menu(message):
-    markup = InlineKeyboardMarkup
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("⚽️ Foot Expert", callback_data="exp_soccer"))
+    markup.add(InlineKeyboardButton("⚾️ MLB Expert", callback_data="exp_baseball"))
+    bot.send_message(CHAT_ID, "🏆 **Tableau de Bord PredictPro**", reply_markup=markup)
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call):
+    if call.data.startswith("exp_"):
+        lancer_scan_expert(call.data.replace("exp_", ""))
+
+# --- 7. DÉMARRAGE ANTI-CONFLIT 409 ---
+if __name__ == "__main__":
+    # Lancement immédiat du serveur Flask pour satisfaire Render
+    Thread(target=run, daemon=True).start()
+    print("🚀 Serveur Web Flask prêt.")
+
+    # PAUSE CRITIQUE : On attend que Render tue l'ancienne version
+    print("⏳ Attente de sécurité (45 secondes) pour éviter le conflit 409...")
+    time.sleep(45)
+
+    while True:
+        try:
+            print("🔄 Tentative de connexion exclusive à Telegram...")
+            bot.remove_webhook()
+            time.sleep(2)
+            
+            # Message de confirmation sur Telegram
+            bot.send_message(CHAT_ID, "✅ **PredictPro V6.1 est opérationnel !**\nL'instance précédente a été déconnectée.")
+            
+            print("🤖 Bot Telegram à l'écoute...")
+            bot.infinity_polling(skip_pending=True, timeout=60)
+            
+        except Exception as e:
+            if "Conflict" in str(e):
+                print("⚠️ Conflit détecté, l'autre instance est encore active. Nouvelle tentative...")
+                time.sleep(20)
+            else:
+                print(f"Relance suite à : {e}")
+                time.sleep(10)
