@@ -77,7 +77,7 @@ def lancer_scan():
                     p_book = (1 / home_odds) * 100
                     
                     # --- TEST FORCÉ (IF TRUE) ---
-                    if True: 
+                    if p_bot > (p_book + 5) 
                         generer_et_envoyer(home, away, p_bot, p_book, home_odds, s)
             else:
                 print(f"ℹ️ Pas de données pour {s}")
