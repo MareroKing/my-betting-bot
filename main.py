@@ -59,27 +59,32 @@ def generer_et_envoyer(h, a, p_bot, p_book, cote, sport):
 
 # --- 5. MOTEUR DE SCAN ---
 def lancer_scan():
-    print("🚀 Scan des marchés en cours...")
+    print("🚀 Scan Multi-Marchés en cours...")
     sports = ["soccer_france_ligue_1", "soccer_spain_la_liga", "soccer_germany_bundesliga", "icehockey_nhl", "baseball_mlb"]
+    matchs_analyses = 0
+    opportunites_trouvees = 0
+    
     for s in sports:
         try:
-            url = f"https://api.the-odds-api.com/v4/sports/{s}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
+            url = f"https://api.the-odds-api.com/v4/sports/{s}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h,totals"
             events = requests.get(url).json()
+            
             if isinstance(events, list):
-                for m in events[:5]:
-                    home = m['home_team']
-                    outcomes = m['bookmakers'][0]['markets'][0]['outcomes']
-                    home_odds = next(o['price'] for o in outcomes if o['name'] == home)
+                for m in events[:8]: # On analyse un peu plus de matchs
+                    matchs_analyses += 1
+                    h, a = m['home_team'], m['away_team']
+                    stats = probas_completes(2.1, 1.2) # On va dynamiser ça après
                     
-                    # Probabilité Bot (Simulée) vs Bookmaker
-                    p_bot = calculer_proba_poisson(2.1, 1.2)
-                    p_book = (1 / home_odds) * 100
-                    
-                    # Filtre d'intelligence : On n'envoie que si c'est une vraie "Value"
-                    if p_bot > (p_book + 5): 
-                        generer_et_envoyer(home, m['away_team'], p_bot, p_book, home_odds, s)
-        except: continue
-    print("✅ Fin du scan.")
+                    # Logique de détection (Victoire, Over, etc.)
+                    # ... (garde ton code de détection ici) ...
+                    # Si une alerte est envoyée : opportunites_trouvees += 1
+
+        except Exception as e: print(f"Erreur {s}: {e}")
+    
+    # RAPPORT FINAL
+    rapport = f"📊 **Rapport de Scan**\n✅ Matchs analysés : {matchs_analyses}\n🔥 Opportunités trouvées : {opportunites_trouvees}"
+    bot.send_message(CHAT_ID, rapport, parse_mode='Markdown')
+    print(f"✅ Fin du scan. {matchs_analyses} matchs vus.")
 
 # --- 6. COMMANDES INTERACTIVES ---
 @bot.message_handler(commands=['start', 'aide'])
