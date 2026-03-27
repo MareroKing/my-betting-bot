@@ -59,11 +59,24 @@ def lancer_scan():
     print("✅ Fin du scan.")
 
 if __name__ == "__main__":
-    # Lancer le serveur web en arrière-plan
+    # 1. On lance le serveur Flask dans un fil séparé
     t = Thread(target=run)
+    t.daemon = True # Ajoute cette ligne pour plus de sécurité
     t.start()
     
-    # Lancer le bot
+    print("🚀 Le bot démarre son premier scan...")
+    # 2. Test d'envoi immédiat pour vérifier la connexion Telegram
+    try:
+        bot.send_message(CHAT_ID, "✅ Le Bot PredictPro est en ligne et commence le scan !")
+    except Exception as e:
+        print(f"Erreur Telegram: {e}")
+
+    # 3. La boucle infinie
     while True:
-        lancer_scan()
+        try:
+            lancer_scan()
+        except Exception as e:
+            print(f"Erreur lors du scan: {e}")
+        
+        print("✅ Scan fini. Repos d'une heure...")
         time.sleep(3600)
