@@ -18,7 +18,7 @@ def run():
 # --- TA CONFIGURATION ---
 TOKEN = "8695595150:AAHyiKL9bX0rMqiVBZ27hAoE0WsyiK9XUnQ"
 CHAT_ID = "1206877909"
-API_KEY_ODDS = "TA_CLE_THE_ODDS_API" # <--- METS TA CLÉ ICI
+API_KEY_ODDS = "119631c89710538cd7d975da537ab4c7" # <--- METS TA CLÉ ICI
 bot = telebot.TeleBot(TOKEN)
 
 def calculer_proba_poisson(m_dom, m_ext):
