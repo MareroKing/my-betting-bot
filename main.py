@@ -107,24 +107,26 @@ def boucle_automatique():
         time.sleep(3600)
 
 if __name__ == "__main__":
-    # Thread 1 : Serveur Web pour Render
-    t_server = Thread(target=run)
-    t_server.daemon = True
-    t_server.start()
+    # 1. Lancement des ouvriers en arrière-plan
+    Thread(target=run, daemon=True).start()
+    Thread(target=boucle_automatique, daemon=True).start()
 
-    # Thread 2 : Boucle de Scan Auto
-    t_scan = Thread(target=boucle_automatique)
-    t_scan.daemon = True
-    t_scan.start()
+    print("🤖 Bot PredictPro : Tentative de connexion propre...")
 
-    print("🤖 Bot PredictPro prêt !")
-
-    # --- SÉCURITÉ ANTI-CONFLIT (ERREUR 409) ---
-    try:
-        # On force la suppression de toute ancienne connexion
-        bot.remove_webhook()
-        time.sleep(1)
-        # On lance l'écoute des messages
-        bot.infinity_polling(skip_pending=True)
-    except Exception as e:
-        print(f"Erreur fatale Polling : {e}")
+    # 2. BOUCLE DE SURVIE ANTI-CONFLIT
+    while True:
+        try:
+            print("🔄 Nettoyage des sessions précédentes...")
+            bot.remove_webhook()
+            time.sleep(2)
+            
+            print("🚀 Lancement du Polling...")
+            bot.infinity_polling(skip_pending=True, timeout=60, long_polling_timeout=5)
+            
+        except Exception as e:
+            if "Conflict" in str(e):
+                print("⚠️ Conflit détecté (doublon). Nouvelle tentative dans 5 secondes...")
+                time.sleep(5)
+            else:
+                print(f"❌ Erreur imprévue : {e}")
+                time.sleep(10)
