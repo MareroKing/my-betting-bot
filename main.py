@@ -99,18 +99,15 @@ def boucle_automatique():
         time.sleep(3600)
 
 if __name__ == "__main__":
-    # 1. Ouvrier Serveur (Render)
     t_server = Thread(target=run)
     t_server.daemon = True
     t_server.start()
 
-    # 2. Ouvrier Scan Automatique
     t_scan = Thread(target=boucle_automatique)
     t_scan.daemon = True
     t_scan.start()
 
-    print("🤖 Bot PredictPro opérationnel et à l'écoute !")
+    print("🤖 Bot PredictPro opérationnel !")
     
-    # 3. Ouvrier Écoute Telegram (Polling)
-    # On laisse celui-ci sur le fil principal pour qu'il ne s'arrête jamais
-    bot.infinity_polling()
+    # On ajoute skip_pending=True pour éviter les conflits au démarrage
+    bot.infinity_polling(skip_pending=True)
