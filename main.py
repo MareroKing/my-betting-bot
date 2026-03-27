@@ -52,7 +52,7 @@ def lancer_scan():
                     c = next(o['price'] for o in outcomes if o['name'] == home)
                     p_bot = calculer_proba_poisson(2.1, 1.2)
                     p_book = (1/c)*100
-                    if p_bot > (p_book + 5):
+                    if True:
                         generer_et_envoyer(home, m['away_team'], p_bot, p_book, c, s)
         except:
             continue
