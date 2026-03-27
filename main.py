@@ -6,15 +6,13 @@ import time
 from flask import Flask
 from threading import Thread
 
-# --- 1. CONFIGURATION DU SERVEUR (POUR RENDER) ---
+# --- 1. SERVEUR DE MAINTIEN (RENDER) ---
 app = Flask('')
 @app.route('/')
-def home(): return "PredictPro Vision Large est en ligne !"
+def home(): return "PredictPro Full Vision is Live!"
+def run(): app.run(host='0.0.0.0', port=10000)
 
-def run():
-    app.run(host='0.0.0.0', port=10000)
-
-# --- 2. CONFIGURATION DU BOT (AVEC TON NOUVEAU TOKEN) ---
+# --- 2. CONFIGURATION ---
 TOKEN = "8695595150:AAFBws8bBEwnRXe_ooZ2zY1jKxt9jhwMQww"
 CHAT_ID = "1206877909"
 API_KEY_ODDS = "119631c89710538cd7d975da53782987" 
@@ -24,28 +22,26 @@ bot = telebot.TeleBot(TOKEN)
 # --- 3. LOGIQUE MATHÉMATIQUE ---
 def calculer_stats(m_dom, m_ext):
     p_win = 0
-    # On calcule la probabilité de victoire domicile (Loi de Poisson)
-    for i in range(1, 7):
+    # Loi de Poisson pour estimer la probabilité de victoire à domicile
+    for i in range(1, 8):
         for j in range(0, i):
             p_win += poisson.pmf(i, m_dom) * poisson.pmf(j, m_ext)
     return round(p_win * 100, 1)
 
-# --- 4. ENVOI DE L'ANALYSE GRAPHIQUE ---
+# --- 4. ENVOI DE L'ANALYSE ---
 def envoyer_analyse(h, a, p_bot, p_book, cote, sport):
     try:
         value = p_bot - p_book
-        # Système de feux tricolores selon la rentabilité
-        if value > 5: icon, color = "✅", "#27ae60" # Excellent
-        elif value > 0: icon, color = "🟡", "#f1c40f" # Neutre/Correct
-        else: icon, color = "🔴", "#e74c3c" # Risqué
+        if value > 5: icon, color = "✅", "#27ae60"
+        elif value > 0: icon, color = "🟡", "#f1c40f"
+        else: icon, color = "🔴", "#e74c3c"
 
         plt.figure(figsize=(6,3.5))
-        plt.bar(['PredictPro', 'Bookmaker'], [p_bot, p_book], color=[color, '#bdc3c7'])
-        plt.title(f"{h} vs {a} ({sport})")
+        plt.bar(['Bot', 'Bookie'], [p_bot, p_book], color=[color, '#bdc3c7'])
+        plt.title(f"{h} vs {a} ({sport[:10]})")
         plt.ylim(0, 100)
         
-        # Nom de fichier unique pour éviter les conflits d'écriture
-        path = f"img_{int(time.time())}.png"
+        path = f"img_{int(time.time())}_{h[:3]}.png"
         plt.savefig(path)
         plt.close()
         
@@ -57,72 +53,67 @@ def envoyer_analyse(h, a, p_bot, p_book, cote, sport):
         
         with open(path, "rb") as img:
             bot.send_photo(CHAT_ID, img, caption=msg, parse_mode='Markdown')
-    except Exception as e:
-        print(f"Erreur envoi image : {e}")
+    except: pass
 
-# --- 5. LE RADAR PANORAMIQUE ---
-def lancer_scan_large():
-    championnats = [
-        "soccer_france_ligue_1", "soccer_spain_la_liga", "soccer_germany_bundesliga", 
-        "soccer_italy_serie_a", "soccer_england_premier_league", "soccer_netherlands_ere_divisie",
-        "baseball_mlb", "basketball_nba", "icehockey_nhl", "soccer_usa_mls",
-        "soccer_portugal_primeira_liga", "soccer_turkey_super_league"
-    ]
+# --- 5. RADAR "FILET DE PÊCHE" (TOUS LES SPORTS) ---
+def lancer_scan_global():
+    # On utilise les clés "parent" pour attraper tout le flux mondial d'un coup
+    categories = ["soccer", "baseball", "basketball", "icehockey"]
     
-    bot.send_message(CHAT_ID, "🌐 **Lancement du Scan Panoramique...**\nAnalyse des championnats mondiaux en cours.")
+    bot.send_message(CHAT_ID, "🌐 **Scan Global des Flux Mondiaux...**\n(Foot, Baseball, Basket, Hockey)")
     
     matchs_total = 0
-    for ligue in championnats:
+    for sport_key in categories:
         try:
-            url = f"https://api.the-odds-api.com/v4/sports/{ligue}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
-            events = requests.get(url).json()
+            # Appel API sur la catégorie globale
+            url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
+            response = requests.get(url)
+            events = response.json()
             
             if isinstance(events, list) and len(events) > 0:
-                # On analyse les 3 premiers matchs de chaque ligue
-                for m in events[:3]:
+                # On prend les 8 prochains matchs de chaque catégorie
+                for m in events[:8]:
                     matchs_total += 1
                     h, a = m['home_team'], m['away_team']
+                    sport_display = m.get('sport_title', sport_key)
                     
                     for bookie in m['bookmakers'][:1]:
                         outcomes = bookie['markets'][0]['outcomes']
                         try:
                             cote = next(o['price'] for o in outcomes if o['name'] == h)
-                            p_bot = calculer_stats(2.1, 1.2) # Puissance simulée
+                            p_bot = calculer_stats(2.1, 1.2) # Moyenne test
                             p_book = (1/cote)*100
-                            envoyer_analyse(h, a, p_bot, p_book, cote, ligue)
+                            envoyer_analyse(h, a, p_bot, p_book, cote, sport_display)
                         except: continue
-            time.sleep(0.5) # Pause légère pour respecter l'API
+            time.sleep(0.5)
         except: continue
         
-    bot.send_message(CHAT_ID, f"🏁 **Scan Terminé**\n{matchs_total} matchs analysés.")
+    if matchs_total == 0:
+        bot.send_message(CHAT_ID, "⚠️ Aucun match actif trouvé pour le moment.\n(Vérifiez le quota de votre clé API Odds)")
+    else:
+        bot.send_message(CHAT_ID, f"🏁 **Scan terminé !**\n{matchs_total} matchs mondiaux analysés.")
 
 # --- 6. COMMANDES ---
 @bot.message_handler(commands=['scan'])
 def handle_scan(message):
-    lancer_scan_large()
+    lancer_scan_global()
 
 @bot.message_handler(commands=['start', 'aide'])
 def handle_start(message):
-    bot.reply_to(message, "🤖 **PredictPro Panoramique**\n\nCommandes :\n/scan : Analyse complète\n/aide : Affiche ce message")
+    bot.reply_to(message, "🤖 **PredictPro Full Vision**\n\n/scan : Analyse mondiale Foot, Baseball, Basket, Hockey.")
 
-# --- 7. DÉMARRAGE ET SURVIE ---
+# --- 7. DÉMARRAGE ---
 if __name__ == "__main__":
-    # Lancement du serveur web
     Thread(target=run, daemon=True).start()
     
-    print("🤖 Tentative de démarrage du bot...")
+    print("🤖 Bot PredictPro : Démarrage en cours...")
     
     while True:
         try:
-            # Nettoyage des webhooks précédents
             bot.remove_webhook()
             time.sleep(1)
-            
-            # Message de confirmation sur Telegram
-            bot.send_message(CHAT_ID, "🚀 **Bot PredictPro Connecté !**\nLe nouveau Token est valide. Tapez /scan pour tester.")
-            
-            print("✅ Bot opérationnel !")
+            bot.send_message(CHAT_ID, "🚀 **Bot Prêt !**\nUtilisez /scan pour voir tout le sport mondial.")
             bot.infinity_polling(skip_pending=True)
         except Exception as e:
-            print(f"🔄 Erreur de connexion : {e}. Nouvelle tentative dans 10s...")
+            print(f"🔄 Erreur : {e}. Relance...")
             time.sleep(10)
