@@ -6,129 +6,98 @@ import time
 from flask import Flask
 from threading import Thread
 
-# --- 1. CONFIGURATION SERVEUR ---
+# --- 1. CONFIGURATION ---
 app = Flask('')
 @app.route('/')
-def home(): return "PredictPro Multi-Sports is Live!"
+def home(): return "PredictPro Vision Large is Live!"
 def run(): app.run(host='0.0.0.0', port=10000)
 
-# --- 2. VOS PARAMÈTRES ---
 TOKEN = "8695595150:AAHyiKL9bX0rMqiVBZ27hAoE0WsyiK9XUnQ"
 CHAT_ID = "1206877909"
 API_KEY_ODDS = "119631c89710538cd7d975da53782987" 
 bot = telebot.TeleBot(TOKEN)
 
-# --- 3. LOGIQUE MATHÉMATIQUE ---
-def probas_completes(m_dom, m_ext):
-    p_victoire_dom = 0
-    p_over_15 = 0
-    for i in range(0, 8): # On monte à 8 pour le Baseball/Hockey
-        for j in range(0, 8): 
-            prob = poisson.pmf(i, m_dom) * poisson.pmf(j, m_ext)
-            if i > j: p_victoire_dom += prob
-            if (i + j) > 1.5: p_over_15 += prob
-    return {
-        "win": round(p_victoire_dom * 100, 1),
-        "over15": round(p_over_15 * 100, 1)
-    }
+# --- 2. CALCULS ---
+def calculer_stats(m_dom, m_ext):
+    p_win = 0
+    for i in range(1, 7):
+        for j in range(0, i):
+            p_win += poisson.pmf(i, m_dom) * poisson.pmf(j, m_ext)
+    return round(p_win * 100, 1)
 
-# --- 4. ENVOI DES ALERTES ---
-def envoyer_alerte_graphique(h, a, type_pari, p_bot, p_book, cote, sport):
+# --- 3. ENVOI DE L'ANALYSE ---
+def envoyer_analyse(h, a, p_bot, p_book, cote, sport):
     try:
-        plt.figure(figsize=(7,4))
-        plt.bar(['PredictPro', 'Bookmaker'], [p_bot, p_book], color=['#27ae60', '#e67e22'])
-        plt.axhline(y=p_book, color='red', linestyle='--', alpha=0.5)
-        plt.title(f"{type_pari} : {h} vs {a}")
+        value = p_bot - p_book
+        # Signal visuel de l'opportunité
+        if value > 5: icon, color = "✅", "#27ae60"
+        elif value > 0: icon, color = "🟡", "#f1c40f"
+        else: icon, color = "🔴", "#e74c3c"
+
+        plt.figure(figsize=(6,3.5))
+        plt.bar(['Bot', 'Bookie'], [p_bot, p_book], color=[color, '#bdc3c7'])
+        plt.title(f"{h} vs {a} ({sport})")
         plt.ylim(0, 100)
         
-        path = "analyse_temp.png"
+        path = f"img_{h[:3]}.png"
         plt.savefig(path)
         plt.close()
         
-        msg = (f"🎯 **OPPORTUNITÉ DÉTECTÉE**\n\n"
-               f"🏟 **Match :** {h} vs {a}\n"
-               f"🏆 **Sport/Ligue :** {sport}\n"
-               f"📈 **Cote :** {cote}\n"
-               f"🔥 **Confiance Bot :** {p_bot}%\n"
-               f"📊 **Confiance Marché :** {p_book:.1f}%")
+        msg = (f"{icon} **ANALYSE : {h}**\n"
+               f"🏆 Sport : {sport}\n"
+               f"📈 Cote : {cote}\n"
+               f"📊 Proba Bot : {p_bot}%\n"
+               f"💰 Value : {round(value, 1)}%")
         
         with open(path, "rb") as img:
             bot.send_photo(CHAT_ID, img, caption=msg, parse_mode='Markdown')
-    except Exception as e: print(f"❌ Erreur graphique : {e}")
+    except: pass
 
-# --- 5. MOTEUR DE SCAN ÉLARGI ---
-def lancer_scan():
-    print("🚀 Scan des ligues mondiales...")
-    # Liste optimisée pour trouver des matchs MAINTENANT
-    sports = [
-        "soccer_france_ligue_1", "soccer_spain_la_liga", 
-        "soccer_italy_serie_a", "soccer_germany_bundesliga",
-        "soccer_portugal_primeira_liga", "soccer_belgium_first_division_a",
-        "baseball_mlb", "icehockey_nhl", "basketball_nba"
+# --- 4. LE RADAR PANORAMIQUE ---
+def lancer_scan_large():
+    # Liste exhaustive des championnats majeurs mondiaux
+    championnats = [
+        # FOOTBALL EUROPE
+        "soccer_france_ligue_1", "soccer_spain_la_liga", "soccer_germany_bundesliga", 
+        "soccer_italy_serie_a", "soccer_england_premier_league", "soccer_netherlands_ere_divisie",
+        # USA / AMÉRIQUE
+        "baseball_mlb", "basketball_nba", "icehockey_nhl", "soccer_usa_mls",
+        # AUTRES (Pour avoir du flux constant)
+        "soccer_portugal_primeira_liga", "soccer_turkey_super_league"
     ]
     
-    matchs_vus = 0
-    alertes_envoyees = 0
+    bot.send_message(CHAT_ID, "🌐 **Lancement du Scan Panoramique...**\n(Analyse des 12 championnats majeurs)")
     
-    for s in sports:
+    matchs_total = 0
+    for ligue in championnats:
         try:
-            url = f"https://api.the-odds-api.com/v4/sports/{s}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h,totals"
-            response = requests.get(url)
-            
-            # Protection si l'API est saturée ou vide
-            if response.status_code != 200: continue
-            events = response.json()
+            url = f"https://api.the-odds-api.com/v4/sports/{ligue}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
+            events = requests.get(url).json()
             
             if isinstance(events, list) and len(events) > 0:
-                for m in events[:10]:
-                    matchs_vus += 1
+                # On prend les 3 matchs les plus proches de CHAQUE championnat
+                for m in events[:3]:
+                    matchs_total += 1
                     h, a = m['home_team'], m['away_team']
-                    stats = probas_completes(2.1, 1.2) # Moyenne test
                     
                     for bookie in m['bookmakers'][:1]:
-                        for market in bookie['markets']:
-                            # Analyse Victoire
-                            if market['key'] == 'h2h':
-                                try:
-                                    cote = next(o['price'] for o in market['outcomes'] if o['name'] == h)
-                                    p_book = (1/cote)*100
-                                    if stats['win'] > (p_book + 1): # +1% pour le test
-                                        envoyer_alerte_graphique(h, a, "VICTOIRE", stats['win'], p_book, cote, s)
-                                        alertes_envoyees += 1
-                                except: continue
-        except Exception as e: 
-            print(f"⚠️ Erreur sur {s}")
-            continue
+                        outcomes = bookie['markets'][0]['outcomes']
+                        try:
+                            cote = next(o['price'] for o in outcomes if o['name'] == h)
+                            p_bot = calculer_stats(2.1, 1.2) # Moyenne simulée
+                            p_book = (1/cote)*100
+                            envoyer_analyse(h, a, p_bot, p_book, cote, ligue)
+                        except: continue
+            time.sleep(1) # Pause pour éviter le ban API
+        except: continue
+        
+    bot.send_message(CHAT_ID, f"🏁 **Scan Panoramique Terminé**\nAnalyse de {matchs_total} matchs effectuée.")
 
-    # Rapport Final
-    rapport = (f"📊 **COMPTE-RENDU DU RADAR**\n\n"
-               f"✅ Matchs analysés : {matchs_vus}\n"
-               f"🔥 Alertes générées : {alertes_envoyees}\n"
-               f"⚾️ MLB Inclus dans le scan.")
-    bot.send_message(CHAT_ID, rapport, parse_mode='Markdown')
-
-# --- 6. INTERACTION & THREADS ---
+# --- 5. COMMANDES ---
 @bot.message_handler(commands=['scan'])
-def manual_scan(message):
-    bot.reply_to(message, "🔎 Scan en cours sur Football, MLB, NHL et NBA...")
-    lancer_scan()
-
-@bot.message_handler(commands=['start', 'aide'])
-def welcome(message):
-    bot.reply_to(message, "🤖 **PredictPro Multi-Sports**\n/scan pour lancer l'analyse.")
-
-def boucle_automatique():
-    time.sleep(10)
-    while True:
-        lancer_scan()
-        time.sleep(3600)
+def handle_scan(message):
+    lancer_scan_large()
 
 if __name__ == "__main__":
     Thread(target=run, daemon=True).start()
-    Thread(target=boucle_automatique, daemon=True).start()
-    while True:
-        try:
-            bot.remove_webhook()
-            time.sleep(1)
-            bot.infinity_polling(skip_pending=True)
-        except: time.sleep(5)
+    bot.infinity_polling(skip_pending=True)
