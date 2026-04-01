@@ -6,18 +6,21 @@ from flask import Flask
 from threading import Thread
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DES VARIABLES ---
+# Il est fortement conseillé de les configurer dans le Dashboard Render (Environment Variables)
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8695595150:AAFBws8bBEwnRXe_ooZ2zY1jKxt9jhwMQww")
 CHAT_ID = os.getenv("CHAT_ID", "1206877909")
 API_KEY_ODDS = os.getenv("ODDS_API_KEY", "3d26e46535751ecf611f0a42f083f33a")
 
 app = Flask('')
+
 @app.route('/')
-def home(): return "PredictPro V20 - Séparé & Complet"
+def home():
+    return "PredictPro V20 est en ligne et opérationnel !"
 
 bot = telebot.TeleBot(TOKEN)
 
-# --- STRUCTURE DES LIGUES (Mise à jour avec "Autres" partout) ---
+# --- STRUCTURE DES MENUS ---
 SPORTS_DATA = {
     "⚽ FOOTBALL": {
         "🇫🇷 Ligue 1": "soccer_france_ligue_one",
@@ -25,6 +28,10 @@ SPORTS_DATA = {
         "🇬🇧 Premier League": "soccer_epl",
         "🇮🇹 Serie A": "soccer_italy_serie_a",
         "🇩🇪 Bundesliga": "soccer_germany_bundesliga",
+        "🇳🇱 Eredivisie": "soccer_netherlands_eredivisie",
+        "🇵🇹 Portugal D1": "soccer_portugal_primeira_liga",
+        "🇧🇪 Jupiler Pro": "soccer_belgium_jupiler_league",
+        "🇹🇷 Turquie D1": "soccer_turkey_super_league",
         "🌍 Autres Foot": "soccer"
     },
     "🏀 BASKETBALL": {
@@ -54,7 +61,6 @@ SPORTS_DATA = {
 def generer_analyse_v20(m_h, m_a, sport, h_n, a_n, date_match):
     p_v1, p_v2, p_n = 0, 0, 0
     
-    # Calcul des probabilités via Poisson (sauf Basket)
     if "basketball" not in sport:
         for i in range(12):
             for j in range(12):
@@ -63,7 +69,6 @@ def generer_analyse_v20(m_h, m_a, sport, h_n, a_n, date_match):
                 elif i < j: p_v2 += prob
                 else: p_n += prob
     else:
-        # Modèle de puissance pour le basket
         p_v1 = (m_h**13.5) / (m_h**13.5 + m_a**13.5) if (m_h+m_a) > 0 else 0.5
         p_v2 = 1 - p_v1
         p_n = 0.02
@@ -73,7 +78,6 @@ def generer_analyse_v20(m_h, m_a, sport, h_n, a_n, date_match):
     fav_exp = m_h if v1 > v2 else m_a
     total_estime = round(m_h + m_a, 2)
     
-    # Unités selon le sport
     if "soccer" in sport or "icehockey" in sport: unit = "Buts"
     elif "basketball" in sport: unit = "Points"
     else: unit = "Runs"
@@ -94,7 +98,7 @@ def generer_analyse_v20(m_h, m_a, sport, h_n, a_n, date_match):
     
     return msg, [v1, n, v2, v1+n, v2+n], round(max(v1, v2), 1)
 
-# --- SCANNER ---
+# --- FONCTION DE SCAN ---
 def lancer_scan(sport_key, is_selection=False):
     try:
         url = f"https://api.the-odds-api.com/v4/sports/{sport_key}/odds/?apiKey={API_KEY_ODDS}&regions=eu&markets=h2h"
@@ -112,7 +116,6 @@ def lancer_scan(sport_key, is_selection=False):
                     c_h = next(o['price'] for o in odds if o['name'] == h)
                     c_a = next(o['price'] for o in odds if o['name'] == a)
                     
-                    # Ajustement des moyennes (Power Ratings)
                     if "soccer" in sport_key: m_h, m_a = 1.4/c_h*2.6, 1.0/c_a*2.6
                     elif "basketball" in sport_key: m_h, m_a = 114/c_h, 109/c_a
                     elif "icehockey" in sport_key: m_h, m_a = 3.3/c_h*2.1, 2.9/c_a*2.1
@@ -122,20 +125,19 @@ def lancer_scan(sport_key, is_selection=False):
                     matchs_trouves.append({'text': text, 'vals': vals, 'conf': conf})
                 except: continue
         
-        # Retourne soit le meilleur (pour sélection), soit les 5 premiers
         if is_selection:
             return sorted(matchs_trouves, key=lambda x: x['conf'], reverse=True)[:1]
         return matchs_trouves[:5]
     except: return []
 
-# --- INTERFACE TELEGRAM ---
+# --- HANDLERS TELEGRAM ---
 @bot.message_handler(commands=['start', 'menu'])
 def menu_principal(message):
     markup = InlineKeyboardMarkup(row_width=1)
     for sport in SPORTS_DATA.keys():
         markup.add(InlineKeyboardButton(sport, callback_data=f"cat_{sport}"))
     markup.add(InlineKeyboardButton("⭐ SÉLECTION DU JOUR (Top 3)", callback_data="top_selection"))
-    bot.send_message(message.chat.id, "💎 **PREDICTPRO V20**\nChoisissez votre sport pour l'analyse :", reply_markup=markup, parse_mode='Markdown')
+    bot.send_message(message.chat.id, "💎 **PREDICTPRO V20**\nChoisissez une discipline :", reply_markup=markup, parse_mode='Markdown')
 
 @bot.callback_query_handler(func=lambda call: True)
 def query_handler(call):
@@ -149,12 +151,12 @@ def query_handler(call):
 
     elif call.data.startswith("run_"):
         key = call.data.replace("run_", "")
-        bot.answer_callback_query(call.id, "Analyse des algorithmes...")
+        bot.answer_callback_query(call.id, "Analyse en cours...")
         res = lancer_scan(key)
         envoyer_photos(call.message.chat.id, res)
 
     elif call.data == "top_selection":
-        bot.answer_callback_query(call.id, "Extraction des meilleures probas...")
+        bot.answer_callback_query(call.id, "Calcul des probabilités...")
         bot.send_message(call.message.chat.id, "🔥 **SÉLECTION DU JOUR**")
         picks = []
         for s in ["soccer_epl", "basketball_nba", "icehockey_nhl"]:
@@ -166,21 +168,33 @@ def query_handler(call):
 
 def envoyer_photos(chat_id, matchs):
     if not matchs:
-        bot.send_message(chat_id, "📭 Pas de matchs trouvés pour les prochaines 24h.")
+        bot.send_message(chat_id, "📭 Aucun match trouvé pour les prochaines 24h.")
         return
     for m in matchs:
         plt.figure(figsize=(5,3))
         plt.bar(['V1', 'N', 'V2', '1N', 'N2'], m['vals'], color=['#3498db','#95a5a6','#e74c3c','#2ecc71','#27ae60'])
         plt.ylim(0, 100)
         plt.title("Probabilités de Résultat")
-        path = f"plot_{int(time.time())}.png"
+        path = f"p_{int(time.time())}.png"
         plt.savefig(path); plt.close()
         with open(path, "rb") as f:
             bot.send_photo(chat_id, f, caption=m['text'], parse_mode='Markdown')
-        os.remove(path)
+        if os.path.exists(path):
+            os.remove(path)
         time.sleep(1)
 
-# --- RUN ---
+# --- LANCEMENT ---
+def run_flask():
+    app.run(host='0.0.0.0', port=10000)
+
 if __name__ == "__main__":
-    Thread(target=lambda: app.run(host='0.0.0.0', port=10000)).start()
-    bot.infinity_polling()
+    # Thread Flask pour Render
+    Thread(target=run_flask).start()
+    
+    # Suppression du webhook pour éviter l'erreur 409
+    bot.remove_webhook()
+    time.sleep(1)
+    
+    print("Bot PredictPro opérationnel !")
+    # Infinity polling avec timeout pour la stabilité
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
